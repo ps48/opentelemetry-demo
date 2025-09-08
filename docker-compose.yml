@@ -793,8 +793,8 @@ services:
       - ${OTEL_COLLECTOR_CONFIG}:/etc/otelcol-config.yml
       - ${OTEL_COLLECTOR_CONFIG_EXTRAS}:/etc/otelcol-config-extras.yml
     ports:
-      - "${OTEL_COLLECTOR_PORT_GRPC}"
-      - "${OTEL_COLLECTOR_PORT_HTTP}"
+      - "${OTEL_COLLECTOR_PORT_GRPC}:${OTEL_COLLECTOR_PORT_GRPC}"
+      - "${OTEL_COLLECTOR_PORT_HTTP}:${OTEL_COLLECTOR_PORT_HTTP}"
     depends_on:
       jaeger:
         condition: service_started
@@ -922,4 +922,63 @@ services:
       opensearch:
         condition: service_healthy
       opensearch-dashboards:
+        condition: service_started
+
+
+  #################################################################################################
+  # Inspektor Gadget Containers
+  #################################################################################################
+
+  ig-cpu:
+    image: ghcr.io/inspektor-gadget/ig:latest
+    container_name: ig-cpu
+    privileged: true
+    pid: "host"
+    network_mode: "host"
+    volumes:
+      - /:/host
+      - ./ig-config-minimal.yaml:/config/ig-config-minimal.yaml
+    command: >
+      run profile_cpu:latest 
+      --config /config/ig-config-minimal.yaml
+      --otel-logs-exporter=my-log-exporter
+      --annotate "oomkill:logs.name=cpu_profile,samples.proc.pid:logs.name=pid,samples:logs.body=\"kern_stack: \" + kern_stack,samples.runtime.containerName:logs.name=containerName,samples.runtime.containerId:logs.name=containerId,samples.runtime.runtimeName:logs.name=runtimeName,samples.runtime.containerImageName:logs.name=containerImageName"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  ig-oom:
+    image: ghcr.io/inspektor-gadget/ig:latest
+    container_name: ig-oom
+    privileged: true
+    pid: "host"
+    network_mode: "host"
+    volumes:
+      - /:/host
+      - ./ig-config-minimal.yaml:/config/ig-config-minimal.yaml
+    command: >
+      run trace_oomkill:latest 
+      --config /config/ig-config-minimal.yaml
+      --otel-logs-exporter=my-log-exporter
+      --annotate "oomkill:logs.name=oom_kill,oomkill.fprocess.parent.pid:logs.name=pid,oomkill:logs.body=\"Process= \" + fprocess.comm,oomkill.runtime.containerName:logs.name=containerName,oomkill.runtime.containerId:logs.name=containerId,oomkill.runtime.runtimeName:logs.name=runtimeName,oomkill.runtime.containerImageName:logs.name=containerImageName,oomkill.runtime.containerStartedAt:logs.name=containerStartedAt"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  ig-tcp:
+    image: ghcr.io/inspektor-gadget/ig:latest
+    container_name: ig-tcp
+    privileged: true
+    pid: "host"
+    network_mode: "host"
+    volumes:
+      - /:/host
+      - ./ig-config-minimal.yaml:/config/ig-config-minimal.yaml
+    command: >
+      run trace_tcp:latest 
+      --config /config/ig-config-minimal.yaml
+      --otel-logs-exporter=my-log-exporter
+      --annotate "tracetcp:logs.name=trace_tcp,tracetcp.proc.pid:logs.name=pid,tracetcp:logs.body=\"Process= \" + proc.comm,tracetcp.runtime.containerName:logs.name=containerName,tracetcp.runtime.containerId:logs.name=containerId,tracetcp.runtime.runtimeName:logs.name=runtimeName,tracetcp.runtime.containerImageName:logs.name=containerImageName,tracetcp.src.addr:logs.name=src.addr,tracetcp.src.port:logs.name=src.port,tracetcp.dst.addr:logs.name=dst.addr,tracetcp.dst.port:logs.name=dst.port,tracetcp.type:logs.name=type,tracetcp.type:logs.name=error"
+    depends_on:
+      otel-collector:
         condition: service_started
