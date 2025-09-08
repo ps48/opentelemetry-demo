@@ -1,153 +1,324 @@
-<!-- markdownlint-disable-next-line -->
-# <img src="https://opentelemetry.io/img/logos/opentelemetry-logo-nav.png" alt="OTel logo" width="45"> OpenTelemetry Demo
+# Inspector Gadget eBPF Integration for OpenTelemetry Demo
 
-[![Slack](https://img.shields.io/badge/slack-@cncf/otel/demo-brightgreen.svg?logo=slack)](https://cloud-native.slack.com/archives/C03B4CWV4DA)
-[![Version](https://img.shields.io/github/v/release/open-telemetry/opentelemetry-demo?color=blueviolet)](https://github.com/open-telemetry/opentelemetry-demo/releases)
-[![Commits](https://img.shields.io/github/commits-since/open-telemetry/opentelemetry-demo/latest?color=ff69b4&include_prereleases)](https://github.com/open-telemetry/opentelemetry-demo/graphs/commit-activity)
-[![Downloads](https://img.shields.io/docker/pulls/otel/demo)](https://hub.docker.com/r/otel/demo)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg?color=red)](https://github.com/open-telemetry/opentelemetry-demo/blob/main/LICENSE)
-[![Integration Tests](https://github.com/open-telemetry/opentelemetry-demo/actions/workflows/run-integration-tests.yml/badge.svg)](https://github.com/open-telemetry/opentelemetry-demo/actions/workflows/run-integration-tests.yml)
-[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opentelemetry-demo)](https://artifacthub.io/packages/helm/opentelemetry-helm/opentelemetry-demo)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/9247/badge)](https://www.bestpractices.dev/en/projects/9247)
+This fork demonstrates zero-code eBPF instrumentation by integrating [Inspektor Gadget](https://inspektor-gadget.io/) with the OpenTelemetry Demo application. This implementation provides system-level observability that complements the existing application telemetry, offering insights into CPU profiling, network connections, and out-of-memory events directly from the kernel.
 
-## Welcome to the OpenTelemetry Astronomy Shop Demo
+## Overview
 
-This repository contains the OpenTelemetry Astronomy Shop, a microservice-based
-distributed system intended to illustrate the implementation of OpenTelemetry in
-a near real-world environment.
+This integration adds three Inspector Gadget containers that run eBPF programs to collect system-level telemetry data and export it to the OpenTelemetry Collector in OTLP format. The data is then processed through Data Prepper and stored in OpenSearch, where it can be visualized alongside traditional application telemetry.
 
-Our goals are threefold:
+![](./OTEL-IG.png)
 
-- Provide a realistic example of a distributed system that can be used to
-  demonstrate OpenTelemetry instrumentation and observability.
-- Build a base for vendors, tooling authors, and others to extend and
-  demonstrate their OpenTelemetry integrations.
-- Create a living example for OpenTelemetry contributors to use for testing new
-  versions of the API, SDK, and other components or enhancements.
+## What's Added
 
-We've already made [huge
-progress](https://github.com/open-telemetry/opentelemetry-demo/blob/main/CHANGELOG.md),
-and development is ongoing. We hope to represent the full feature set of
-OpenTelemetry across its languages in the future.
+### eBPF Instrumentation Containers
 
-If you'd like to help (**which we would love**), check out our [contributing
-guidance](./CONTRIBUTING.md).
+Three specialized Inspector Gadget containers run continuously to monitor different aspects of system behavior:
 
-If you'd like to extend this demo or maintain a fork of it, read our
-[fork guidance](https://opentelemetry.io/docs/demo/forking/).
+1. **`ig-cpu`** - CPU profiling using `profile_cpu` gadget
+2. **`ig-oom`** - Out-of-memory kill tracking using `trace_oomkill` gadget  
+3. **`ig-tcp`** - TCP connection tracing using `trace_tcp` gadget
 
-## Quick start
+### Enhanced Configuration
 
-You can be up and running with the demo in a few minutes. Check out the docs for
-your preferred deployment method:
+- **OpenSearch Dashboards** enhanced with workspace support and query enhancements
 
-- [Docker](https://opentelemetry.io/docs/demo/docker_deployment/)
-- [Kubernetes](https://opentelemetry.io/docs/demo/kubernetes_deployment/)
+### Pre-built Dashboards
 
-## Documentation
+The integration includes a comprehensive dashboard (`export.ndjson`) with visualizations for:
 
-For detailed documentation, see [Demo Documentation][docs]. If you're curious
-about a specific feature, the [docs landing page][docs] can point you in the
-right direction.
+- **Active Containers** - Count of running containers
+- **TCP Connections by Container** - Heatmap of network connections and errors
+- **Network Flow Visualization** - Sankey diagram showing container-to-destination traffic
+- **Website Request Patterns** - Time series of frontend proxy requests
+- **CPU Consumption** - CPU usage profiling by container over time
+- **CPU Profile Details** - Detailed CPU profiling information
+- **OOM Process Monitoring** - Out-of-memory events tracking
+- **OOM Kernel Stack** - Detailed OOM event information
 
-## Demos featuring the Astronomy Shop
+## Architecture
 
-We welcome any vendor to fork the project to demonstrate their services and
-adding a link below. The community is committed to maintaining the project and
-keeping it up to date for you.
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Application   │    │  OpenTelemetry   │    │  Data Prepper   │
+│   Services      │───▶│    Collector     │───▶│   Processing    │
+└─────────────────┘    │   (Port 4317)    │    └─────────────────┘
+                       └──────────────────┘             │
+┌─────────────────┐             ▲                       ▼
+│  Inspector      │             │              ┌─────────────────┐
+│  Gadget eBPF    │─────────────┘              │   OpenSearch    │
+│  Containers:    │                            │   + Dashboards  │
+│  • ig-cpu       │                            └─────────────────┘
+│  • ig-oom       │
+│  • ig-tcp       │
+└─────────────────┘
+         │
+┌─────────────────┐
+│  Linux Kernel   │
+│  eBPF Programs  │
+└─────────────────┘
+```
 
-|                           |                |                                  |
-|---------------------------|----------------|----------------------------------|
-| [AlibabaCloud LogService] | [Elastic]      | [Parseable]                      |
-| [Apache Doris]            | [Google Cloud] | [Sentry]                         |
-| [AppDynamics]             | [Grafana Labs] | [ServiceNow Cloud Observability] |
-| [Aspecto]                 | [Guance]       | [SigNoz]                         |
-| [Axiom]                   | [Honeycomb.io] | [Splunk]                         |
-| [Axoflow]                 | [Instana]      | [Sumo Logic]                     |
-| [Azure Data Explorer]     | [Kloudfuse]    | [TelemetryHub]                   |
-| [Causely]                 | [Last9]        | [Teletrace]                      |
-| [ClickStack]              | [Liatrio]      | [Tracetest]                      |
-| [Coralogix]               | [Logz.io]      | [Uptrace]                        |
-| [Dash0]                   | [New Relic]    | [VictoriaMetrics]                |
-| [Datadog]                 | [OpenSearch]   |                                  |
-| [Dynatrace]               | [Oracle]       |                                  |
+## Prerequisites
 
-## Contributing
+- **Docker**: Version 20.10+
+- **Docker Compose**: Version 2.0+
+- **Linux Host**: Required for eBPF functionality (Inspector Gadget containers run with `privileged: true`)
+- **Host Network Access**: Containers use `network_mode: "host"` for kernel access
 
-To get involved with the project see our [CONTRIBUTING](CONTRIBUTING.md)
-documentation. Our [SIG Calls](CONTRIBUTING.md#join-a-sig-call) are every other
-Wednesday at 8:30 AM PST and anyone is welcome.
+## Quick Start
 
-### Maintainers
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/ps48/opentelemetry-demo.git
+   cd opentelemetry-demo
+   git checkout inspektor-gadget
+   ```
 
-- [Juliano Costa](https://github.com/julianocosta89), Datadog
-- [Mikko Viitanen](https://github.com/mviitane), Dynatrace
-- [Pierre Tessier](https://github.com/puckpuck), Honeycomb
-- [Roger Coll](https://github.com/rogercoll), Elastic
+2. **Start the enhanced demo**:
+   ```bash
+   docker compose up -d
+   ```
 
-For more information about the maintainer role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#maintainer).
+3. **Generate some traffic** to see the eBPF data:
+   ```bash
+   # Visit the web store to generate network traffic
+   curl http://localhost:8080
+   
+   # Or use the load generator if available
+   docker compose run loadgenerator
+   ```
 
-### Approvers
+4. **Access the dashboards**:
+   - **Astronomy Shop**: http://localhost:8080
+   - **OpenSearch Dashboards**: http://localhost:5601
+   - **Jaeger**: http://localhost:16686
 
-- [Cedric Ziel](https://github.com/cedricziel), Grafana Labs
-- [Shenoy Pratik](https://github.com/ps48), AWS OpenSearch
+5. **Import the eBPF dashboard**:
+   - In OpenSearch Dashboards, go to Management → Saved Objects
+   - Import the `assets/export.ndjson` file
+   - Navigate to the "OTel Demo - eBPF" dashboard
 
-For more information about the approver role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#approver).
+## Configuration Details
 
-### Emeritus
+### Inspector Gadget Configuration (`ig-config-minimal.yaml`)
 
-- [Austin Parker](https://github.com/austinlparker)
-- [Carter Socha](https://github.com/cartersocha)
-- [Michael Maxwell](https://github.com/mic-max)
-- [Morgan McLean](https://github.com/mtwo)
-- [Penghan Wang](https://github.com/wph95)
-- [Reiley Yang](https://github.com/reyang)
-- [Ziqi Zhao](https://github.com/fatsheep9146)
+```yaml
+operator:
+  otel-logs:
+    exporters:
+      my-log-exporter:
+        exporter: otlp-grpc
+        endpoint: "0.0.0.0:4317"
+        insecure: true
+```
 
-For more information about the emeritus role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#emeritus-maintainerapprovertriager).
+### Container Specifications
 
-### Thanks to all the people who have contributed
+#### CPU Profiling Container (`ig-cpu`)
+```yaml
+ig-cpu:
+  image: ghcr.io/inspektor-gadget/ig:latest
+  privileged: true
+  pid: "host"
+  network_mode: "host"
+  command: >
+    run profile_cpu:latest 
+    --config /config/ig-config-minimal.yaml
+    --otel-logs-exporter=my-log-exporter
+    --annotate "samples:logs.body=\"kern_stack: \" + kern_stack,..."
+```
 
-[![contributors](https://contributors-img.web.app/image?repo=open-telemetry/opentelemetry-demo)](https://github.com/open-telemetry/opentelemetry-demo/graphs/contributors)
+#### OOM Kill Tracking Container (`ig-oom`)
+```yaml
+ig-oom:
+  image: ghcr.io/inspektor-gadget/ig:latest
+  privileged: true
+  pid: "host" 
+  network_mode: "host"
+  command: >
+    run trace_oomkill:latest
+    --config /config/ig-config-minimal.yaml
+    --otel-logs-exporter=my-log-exporter
+    --annotate "oomkill:logs.body=\"Process= \" + fprocess.comm,..."
+```
 
-[docs]: https://opentelemetry.io/docs/demo/
+#### TCP Connection Tracing Container (`ig-tcp`)
+```yaml
+ig-tcp:
+  image: ghcr.io/inspektor-gadget/ig:latest
+  privileged: true
+  pid: "host"
+  network_mode: "host"
+  command: >
+    run trace_tcp:latest
+    --config /config/ig-config-minimal.yaml
+    --otel-logs-exporter=my-log-exporter
+    --annotate "tracetcp:logs.body=\"Process= \" + proc.comm,..."
+```
 
-<!-- Links for Demos featuring the Astronomy Shop section -->
+### Data Processing Pipeline
 
-[AlibabaCloud LogService]: https://github.com/aliyun-sls/opentelemetry-demo
-[AppDynamics]: https://community.splunk.com/t5/AppDynamics-Knowledge-Base/How-to-observe-Kubernetes-deployment-of-OpenTelemetry-demo-app/ta-p/741454
-[Apache Doris]: https://github.com/apache/doris-opentelemetry-demo
-[Aspecto]: https://github.com/aspecto-io/opentelemetry-demo
-[Axiom]: https://play.axiom.co/axiom-play-qf1k/dashboards/otel.traces.otel-demo-traces
-[Axoflow]: https://axoflow.com/opentelemetry-support-in-more-detail-in-axosyslog-and-syslog-ng/
-[Azure Data Explorer]: https://github.com/Azure/Azure-kusto-opentelemetry-demo
-[Causely]: https://github.com/causely-oss/otel-demo
-[ClickStack]: https://github.com/ClickHouse/opentelemetry-demo
-[Coralogix]: https://coralogix.com/blog/configure-otel-demo-send-telemetry-data-coralogix
-[Dash0]: https://github.com/dash0hq/opentelemetry-demo
-[Datadog]: https://docs.datadoghq.com/opentelemetry/guide/otel_demo_to_datadog
-[Dynatrace]: https://www.dynatrace.com/news/blog/opentelemetry-demo-application-with-dynatrace/
-[Elastic]: https://github.com/elastic/opentelemetry-demo
-[Google Cloud]: https://github.com/GoogleCloudPlatform/opentelemetry-demo
-[Grafana Labs]: https://github.com/grafana/opentelemetry-demo
-[Guance]: https://github.com/GuanceCloud/opentelemetry-demo
-[Honeycomb.io]: https://github.com/honeycombio/opentelemetry-demo
-[Instana]: https://github.com/instana/opentelemetry-demo
-[Kloudfuse]: https://github.com/kloudfuse/opentelemetry-demo
-[Last9]: https://last9.io/docs/integrations-opentelemetry-demo/
-[Liatrio]: https://github.com/liatrio/opentelemetry-demo
-[Logz.io]: https://logz.io/learn/how-to-run-opentelemetry-demo-with-logz-io/
-[New Relic]: https://github.com/newrelic/opentelemetry-demo
-[OpenSearch]: https://github.com/opensearch-project/opentelemetry-demo
-[Oracle]: https://github.com/oracle-quickstart/oci-o11y-solutions/blob/main/knowledge-content/opentelemetry-demo
-[Parseable]: https://www.parseable.com/blog/open-telemetry-demo-with-parseable-a-complete-observability-setup
-[Sentry]: https://github.com/getsentry/opentelemetry-demo
-[ServiceNow Cloud Observability]: https://docs.lightstep.com/otel/quick-start-operator#send-data-from-the-opentelemetry-demo
-[SigNoz]: https://signoz.io/blog/opentelemetry-demo/
-[Splunk]: https://github.com/signalfx/opentelemetry-demo
-[Sumo Logic]: https://www.sumologic.com/blog/common-opentelemetry-demo-application/
-[TelemetryHub]: https://github.com/TelemetryHub/opentelemetry-demo/tree/telemetryhub-backend
-[Teletrace]: https://github.com/teletrace/opentelemetry-demo
-[Tracetest]: https://github.com/kubeshop/opentelemetry-demo
-[Uptrace]: https://github.com/uptrace/uptrace/tree/master/example/opentelemetry-demo
-[VictoriaMetrics]: https://github.com/VictoriaMetrics-Community/opentelemetry-demo
+The integration modifies the Data Prepper configuration to handle both application and eBPF telemetry:
+
+- **Logs Pipeline**: `otel_logs_source` → OpenSearch (`log-analytics` index)
+- **Traces Pipeline**: `otel_trace_source` → Raw pipeline + Service map → OpenSearch
+
+## Dashboard Visualizations
+
+### Network Analysis
+- **TCP Connections Heatmap**: Shows connection patterns and errors by container
+- **Network Flow Sankey**: Visualizes traffic flows between containers and destinations
+- **Website Request Timeline**: Tracks frontend proxy requests over time
+
+### Performance Monitoring
+- **Active Container Count**: Real-time count of running containers
+- **CPU Consumption Timeline**: CPU usage patterns by container
+- **CPU Profile Table**: Detailed CPU profiling data with kernel stack traces
+
+### System Health
+- **OOM Event Monitoring**: Tracks out-of-memory kills by container and time
+- **OOM Kernel Stack**: Detailed information about OOM events
+
+## Data Schema
+
+The eBPF data is exported as OpenTelemetry logs with rich attributes:
+
+### Common Attributes
+- `log.attributes.containerName` - Container generating the event
+- `log.attributes.containerId` - Container ID
+- `log.attributes.containerImageName` - Container image
+- `log.attributes.pid` - Process ID
+- `log.attributes.runtimeName` - Container runtime
+
+### TCP Trace Specific
+- `log.attributes.src.addr` / `log.attributes.src.port` - Source address/port
+- `log.attributes.dst.addr` / `log.attributes.dst.port` - Destination address/port
+- `log.attributes.type` - Connection type
+- `log.attributes.error` - Error information
+
+### CPU Profile Specific
+- `body` - Kernel stack trace information
+- CPU sampling data with process context
+
+### OOM Kill Specific  
+- `body` - Process information for killed process
+- `log.attributes.containerStartedAt` - Container start time
+
+## Querying the Data
+
+Use PPL (Piped Processing Language) queries in OpenSearch Dashboards:
+
+### Active Containers
+```sql
+source = logs-otel-v1-* 
+| where serviceName = 'inspektor-gadget'
+| where instrumentationScope.name = 'trace_tcp'
+| dedup log.attributes.containerName
+| stats count(log.attributes.containerName)
+```
+
+### TCP Connections by Container
+```sql
+source = logs-otel-v1-* 
+| where serviceName = 'inspektor-gadget'
+| where instrumentationScope.name = 'trace_tcp'
+| stats count() by log.attributes.error, log.attributes.containerName
+```
+
+### CPU Usage Over Time
+```sql
+source = logs-otel-v1-* 
+| where serviceName = "inspektor-gadget" 
+| where match(body, "[0]")
+| where log.attributes.containerName in ('ad', 'accounting', 'cart', 'currency', 'shipping', 'product-catalog', 'image-provider')
+| stats count() as `count` by span(time, 1m), log.attributes.containerName
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **eBPF Programs Not Starting**
+   ```bash
+   # Check if containers are running
+   docker ps | grep ig-
+   
+   # Check container logs
+   docker logs ig-cpu
+   docker logs ig-oom  
+   docker logs ig-tcp
+   ```
+
+2. **No Data in OpenSearch**
+   ```bash
+   # Verify OpenTelemetry Collector is receiving data
+   docker logs otel-collector
+   
+   # Check Data Prepper logs
+   docker logs data-prepper
+   ```
+
+3. **Permission Issues**
+   - Ensure Docker has permission to run privileged containers
+   - Verify the host system supports eBPF (kernel 4.18+)
+
+### Verifying eBPF Functionality
+
+```bash
+# Check if eBPF programs are loaded
+sudo bpftool prog list
+
+# Monitor system calls (if available)
+sudo strace -e trace=bpf -p $(pidof ig)
+```
+
+## Development and Customization
+
+### Adding New Gadgets
+
+To add additional Inspector Gadget monitoring:
+
+1. Add a new service in `docker-compose.yml`:
+   ```yaml
+   ig-new-gadget:
+     image: ghcr.io/inspektor-gadget/ig:latest
+     privileged: true
+     pid: "host"
+     network_mode: "host"
+     volumes:
+       - /:/host
+       - ./ig-config-minimal.yaml:/config/ig-config-minimal.yaml
+     command: >
+       run your_gadget:latest 
+       --config /config/ig-config-minimal.yaml
+       --otel-logs-exporter=my-log-exporter
+       --annotate "your_annotations"
+   ```
+
+2. Update the dashboard configurations in `assets/export.ndjson`
+
+### Customizing Annotations
+
+The `--annotate` flags control how eBPF data is mapped to OpenTelemetry log attributes. Modify these to:
+- Change log message format (`logs.body`)
+- Map different fields to log attributes (`field:logs.name=attribute_name`)
+- Filter or transform the data
+
+## Performance Considerations
+
+- **Resource Usage**: eBPF programs have minimal overhead, but the containers require privileged access
+- **Data Volume**: TCP tracing can generate significant data in high-traffic environments
+- **Storage**: Consider log retention policies for OpenSearch indices
+
+## Security Notes
+
+- Inspector Gadget containers run with `privileged: true` and host network access
+- This is required for eBPF functionality but increases attack surface
+- Use appropriate network segmentation and access controls in production
+
+## Resources
+
+- [Inspector Gadget Documentation](https://inspektor-gadget.io/docs/)
+- [OpenTelemetry Demo Documentation](https://opentelemetry.io/docs/demo/)
+- [OpenSearch PPL Reference](https://opensearch.org/docs/latest/search-plugins/ppl/index/)
+- [eBPF Technology Overview](https://ebpf.io/what-is-ebpf/)
