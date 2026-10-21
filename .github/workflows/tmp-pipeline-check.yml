@@ -1,0 +1,19 @@
+name: TMP pipeline check
+on:
+  push:
+    branches: ['tmp/**']
+permissions:
+  contents: read
+jobs:
+  sanity:
+    name: Sanity check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run sanitycheck.py
+        run: python3 ./internal/tools/sanitycheck.py
+      - name: Check collector config layers keep earlier pipeline components
+        run: python3 ./internal/tools/check_collector_pipelines.py
